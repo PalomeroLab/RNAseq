@@ -1,7 +1,5 @@
 #!/bin/bash
 
-#!/bin/bash
-
 align_with_hisat2() {
 	local sampleID="$1"
 	local INPUT_FOLDER="$2"

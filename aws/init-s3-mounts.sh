@@ -26,5 +26,7 @@ for bucket in "${S3_BUCKETS[@]}"; do
 	# s3-mount --allow-other "${bucket}" "${S3_MOUNTDIR}/${bucket}"
 	# NOTE: use s3fs instead of s3-mount if on macos
 	s3fs "${bucket}" "${S3_MOUNTDIR}/${bucket}"
+	# example:
+	# s3fs labaf-missionbio-tapestri ~/amlseqdata
 	echo "Mounted ${bucket} to ${S3_MOUNTDIR}/${bucket}"
 done
