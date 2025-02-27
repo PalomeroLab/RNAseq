@@ -1,11 +1,12 @@
 #!/usr/bin/env Rscript
 library(DESeq2)
 library(apeglm)
-library(ggplot2)
 
-setwd("/Users/rdn/GitHub/palomerolab")
-counts_file <- "./data/RNAseq/LAURA/PHIP/counts.txt"
-design_file <- "./data/RNAseq/LAURA/PHIP/design.csv"
+# /Users/rdn/GitHub/palomerolab/data/RNAseq/featureCounts
+# set the wd to /Users/rdn/GitHub/palomerolab
+setwd("/home/ubuntu/20241029_Jurkat_PHF6-PHIP-KO_LQ")
+counts_file <- "counts/counts_noclone9.txt"
+design_file <- "counts/design.tsv"
 
 counts_data <- read.table(
   counts_file,
@@ -35,11 +36,12 @@ for (sep in c("\t", " ", ",")) {
 }
 
 stopifnot(!is.null(design_data))
+
 stopifnot(all(colnames(count_matrix) == design_data$sample))
 
 colnames(design_data)
 design_data$condition
-design_data$sample
+
 colnames(count_matrix)
 
 dds <- DESeqDataSetFromMatrix(
@@ -50,39 +52,31 @@ dds <- DESeqDataSetFromMatrix(
   ),
   design = ~condition
 )
-
-# inspect the new dds object
 dds
+
+# Here is where you would add additional column metadata
+# ....
+
+# Run the analysis on the object
+dds <- DESeq(dds)
+res <- results(dds)
 
 # check the resultsNames for the intercepted comparisons
 resultsNames(dds)
 
-# Run the analysis on the object
-# dds <- DESeq(dds)
-dds <- DESeq(dds, betaPrior = FALSE)
-res <- results(dds)
-res_phf6 <- results(dds, name = "condition_PHF6_vs_CTRL")
-res_phip <- results(dds, name = "condition_PHIP_vs_CTRL")
-
-
-# MA-plot
-plotMA(res, ylim = c(-2, 2))
-
 resLFC_PHF6 <- lfcShrink(dds, coef = "condition_PHF6_vs_CTRL", type = "apeglm")
 resLFC_PHIP <- lfcShrink(dds, coef = "condition_PHIP_vs_CTRL", type = "apeglm")
 
-plotMA(resLFC_PHF6, ylim = c(-2, 2))
-plotMA(resLFC_PHIP, ylim = c(-2, 2))
-
 # Extracting transformed values
 vsd <- vst(dds, blind = FALSE)
-
 rld <- rlog(dds, blind = FALSE)
 head(assay(vsd), 3)
 
 # Principal component plot of the samples
 plotPCA(vsd, intgroup = c("condition"))
 
+# Convert to ggplot by assigning the result to a new var
+# Get sample names from dds and add them to pcaData
 pcaData <- plotPCA(vsd, intgroup=c("condition"), returnData=TRUE)
 
 # Get the percentage of variance explained by PC1 and PC2
@@ -98,60 +92,21 @@ ggplot(pcaData, aes(PC1, PC2, color = SampleName, shape = condition)) +
   ylab(paste0("PC2: ", percentVar[2], "% variance")) + 
   coord_fixed()
 
-# use ggsave to save it 
-# ggsave("./resultsPCA_plot.png")
-ggsave("./results/RNAseq/LAURA/PHIP/PCA_plot.png")
 
-colnames(dds)
-# Plot the most basic volcano plot
-# For the most basic volcano plot, only a single data-frame, data-matrix, or
-# tibble of test results is required, containing point labels, log2FC, and
-# adjusted or unadjusted P values. The default cut-off for log2FC is >|2|; the
-# default cut-off for P value is 10e-6.
-library(EnhancedVolcano)
-
-EnhancedVolcano(resLFC_PHIP,
-  lab = rownames(resLFC_PHIP),
-  x = "log2FoldChange",
-  y = "pvalue"
-)
-
-ggsave("./results/RNAseq/LAURA/PHIP/VolcanoPHIP.png")
-
-
-EnhancedVolcano(resLFC_PHF6,
-  lab = rownames(resLFC_PHF6),
-  x = "log2FoldChange",
-  y = "pvalue"
-)
-
-ggsave("./results/RNAseq/LAURA/PHIP/VolcanoPHF6.png")
-
-# Effects of transformations on the variance
+# -----------------------------------------------------------------------------
 # this gives log2(n + 1)
 ntd <- normTransform(dds)
 library("vsn")
 meanSdPlot(assay(ntd))
-meanSdPlot(assay(vsd))
-meanSdPlot(assay(rld))
 
-
-
-
-EnhancedVolcano(res_phf6,
-  lab = rownames(res_phf6),
-  x = "log2FoldChange",
-  y = "pvalue"
-)
-
-ggsave("./results/RNAseq/LAURA/PHIP/noshrinkVolcanoPHIP.png")
-
-
-EnhancedVolcano(res_phip,
-  lab = rownames(res_phip),
-  x = "log2FoldChange",
-  y = "pvalue"
-)
-
-ggsave("./results/RNAseq/LAURA/PHIP/noshrinkVolcanoPHF6.png")
-
+# Heatmap of the sample-to-sample distances
+sampleDists <- dist(t(assay(vsd)))
+# library("RColorBrewer")
+# sampleDistMatrix <- as.matrix(sampleDists)
+# rownames(sampleDistMatrix) <- paste(vsd$condition, vsd$type, sep="-")
+# colnames(sampleDistMatrix) <- NULL
+# colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+# pheatmap(sampleDistMatrix,
+#          clustering_distance_rows=sampleDists,
+#          clustering_distance_cols=sampleDists,
+#          col=colors)
