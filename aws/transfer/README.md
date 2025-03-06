@@ -5,11 +5,7 @@ S3 URIs:
 - s3://labaf-missionbio-tapestri/AML_singlecell_atlas_JB/
 - s3://lab-aaf-ngs-data-archive/RNAseq/10X_Chromium/AML_singlecell_atlas_JB/
 
-
-
-
 ## s3://lab-aaf-ngs-data-archive/RNAseq/10X_Chromium/AML_singlecell_atlas_JB/
-
 
 ```console
 CU_M_115_Mission_Bio
@@ -147,4 +143,3 @@ CU_M_58_Mission_Bio
 CU_M_85_Mission_Bio
 README.txt
 ```
-
