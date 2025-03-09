@@ -1,3 +1,6 @@
 [submodule "aws/glaciertool"]
 	path = aws/glaciertool
 	url = git@github.com:PalomeroLab/glaciertool.git
+[submodule "rnaseq"]
+	path = rnaseq
+	url = git@github.com:PalomeroLab/RNAseq.git

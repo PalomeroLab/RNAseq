@@ -1,157 +1,22 @@
-#!/usr/bin/env Rscript
-library(DESeq2)
-library(apeglm)
-library(ggplot2)
+setwd("/Users/rdn/GitHub/palomerolab/workflows/rnaseq/")
+source(".Rprofile")
 
-setwd("/Users/rdn/GitHub/palomerolab")
-counts_file <- "./data/RNAseq/LAURA/PHIP/counts.txt"
-design_file <- "./data/RNAseq/LAURA/PHIP/design.csv"
+# Combine the function calls for DESeq our wrapper function
+# note: betaPrior = FALSE is default
+dds <- DESeq(DESeqDataSetFromFeatureCounts(counts_file, design_file))
 
-counts_data <- read.table(
-  counts_file,
-  sep = "\t",
-  header = TRUE,
-  stringsAsFactors = FALSE,
-  row.names = "Geneid"
-)
+resultsNames(dds_default)
+# [1] "Intercept"     "condition_PHF6_vs_CTRL" "condition_PHIP_vs_CTRL"
 
-count_matrix <- as.matrix(counts_data[, 6:ncol(counts_data)])
-mode(count_matrix) <- "integer"
-
-# Try different separators for design file
-design_data <- NULL
-for (sep in c("\t", " ", ",")) {
-  design_data <- tryCatch(
-    read.table(
-      design_file,
-      sep = sep,
-      header = FALSE,
-      stringsAsFactors = FALSE,
-      col.names = c("sample", "condition")
-    ),
-    error = function(e) NULL
-  )
-  if (!is.null(design_data)) break
-}
-
-stopifnot(!is.null(design_data))
-stopifnot(all(colnames(count_matrix) == design_data$sample))
-
-colnames(design_data)
-design_data$condition
-design_data$sample
-colnames(count_matrix)
-
-dds <- DESeqDataSetFromMatrix(
-  countData = count_matrix,
-  colData = data.frame(
-    condition = factor(design_data$condition),
-    row.names = design_data$sample
-  ),
-  design = ~condition
-)
-
-# inspect the new dds object
-dds
-
-# check the resultsNames for the intercepted comparisons
 resultsNames(dds)
+# [1] "Intercept"     "condition_PHF6_vs_CTRL" "condition_PHIP_vs_CTRL"
 
-# Run the analysis on the object
-# dds <- DESeq(dds)
-dds <- DESeq(dds, betaPrior = FALSE)
-res <- results(dds)
-res_phf6 <- results(dds, name = "condition_PHF6_vs_CTRL")
-res_phip <- results(dds, name = "condition_PHIP_vs_CTRL")
+resultsNames(ddsB)
+# [1] "Intercept"     "conditionCTRL" "conditionPHF6" "conditionPHIP"
 
+# Using  lfcShrink(dds, coef=2)
+res_phf6 <- results(dds, coef=2, name = "condition_PHF6_vs_CTRL")
+res_phip <- results(dds, coef=2, name = "condition_PHIP_vs_CTRL")
 
 # MA-plot
 plotMA(res, ylim = c(-2, 2))
-
-resLFC_PHF6 <- lfcShrink(dds, coef = "condition_PHF6_vs_CTRL", type = "apeglm")
-resLFC_PHIP <- lfcShrink(dds, coef = "condition_PHIP_vs_CTRL", type = "apeglm")
-
-plotMA(resLFC_PHF6, ylim = c(-2, 2))
-plotMA(resLFC_PHIP, ylim = c(-2, 2))
-
-# Extracting transformed values
-vsd <- vst(dds, blind = FALSE)
-
-rld <- rlog(dds, blind = FALSE)
-head(assay(vsd), 3)
-
-# Principal component plot of the samples
-plotPCA(vsd, intgroup = c("condition"))
-
-pcaData <- plotPCA(vsd, intgroup=c("condition"), returnData=TRUE)
-
-# Get the percentage of variance explained by PC1 and PC2
-percentVar <- round(100 * attr(pcaData, "percentVar"))
-
-# Assuming you want to color by the rownames in the dds colData
-pcaData$SampleName <- rownames(dds@colData)
-
-# Create the PCA plot, coloring by sample names
-ggplot(pcaData, aes(PC1, PC2, color = SampleName, shape = condition)) +
-  geom_point(size = 3) +  # Plot the points
-  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
-  ylab(paste0("PC2: ", percentVar[2], "% variance")) + 
-  coord_fixed()
-
-# use ggsave to save it 
-# ggsave("./resultsPCA_plot.png")
-ggsave("./results/RNAseq/LAURA/PHIP/PCA_plot.png")
-
-colnames(dds)
-# Plot the most basic volcano plot
-# For the most basic volcano plot, only a single data-frame, data-matrix, or
-# tibble of test results is required, containing point labels, log2FC, and
-# adjusted or unadjusted P values. The default cut-off for log2FC is >|2|; the
-# default cut-off for P value is 10e-6.
-library(EnhancedVolcano)
-
-EnhancedVolcano(resLFC_PHIP,
-  lab = rownames(resLFC_PHIP),
-  x = "log2FoldChange",
-  y = "pvalue"
-)
-
-ggsave("./results/RNAseq/LAURA/PHIP/VolcanoPHIP.png")
-
-
-EnhancedVolcano(resLFC_PHF6,
-  lab = rownames(resLFC_PHF6),
-  x = "log2FoldChange",
-  y = "pvalue"
-)
-
-ggsave("./results/RNAseq/LAURA/PHIP/VolcanoPHF6.png")
-
-# Effects of transformations on the variance
-# this gives log2(n + 1)
-ntd <- normTransform(dds)
-library("vsn")
-meanSdPlot(assay(ntd))
-meanSdPlot(assay(vsd))
-meanSdPlot(assay(rld))
-
-
-
-
-EnhancedVolcano(res_phf6,
-  lab = rownames(res_phf6),
-  x = "log2FoldChange",
-  y = "pvalue"
-)
-
-ggsave("./results/RNAseq/LAURA/PHIP/noshrinkVolcanoPHIP.png")
-
-
-EnhancedVolcano(res_phip,
-  lab = rownames(res_phip),
-  x = "log2FoldChange",
-  y = "pvalue"
-)
-
-ggsave("./results/RNAseq/LAURA/PHIP/noshrinkVolcanoPHF6.png")
-

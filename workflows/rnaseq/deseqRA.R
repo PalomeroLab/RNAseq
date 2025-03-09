@@ -1,144 +1,89 @@
 #!/usr/bin/env Rscript
-library(DESeq2)
-library(apeglm)
-library(ggplot2)
-library(EnhancedVolcano)
-library(tidyr)
-library(dplyr)
+counts_file <- "./data/featureCounts/ra_counts.tsv"
+design_file <- "./data/featureCounts/ra_data.tsv"
+dds_ra <- DESeq(DESeqDataSetFromFeatureCounts(counts_file, design_file))
+dds <- dds_ra
 
-setwd("/Users/rdn/GitHub/palomerolab")
-counts_file <- "./data/RNAseq/featureCounts/ra_counts.tsv"
-design_file <- "./data/RNAseq/featureCounts/ra_data.tsv"
+colnames(dds)
+#  [1] "DMSO_1"       "DMSO_2"       "DMSO_3"       "Fingolimod_1" "Fingolimod_2" "Fingolimod_3"
+#  [7] "Ozanimod_1"   "Ozanimod_2"   "Ozanimod_3"   "Ponesimod_1"  "Ponesimod_2"  "Ponesimod_3"
 
-counts_data <- read.table(
-  counts_file,
-  sep = "\t",
-  header = TRUE,
-  stringsAsFactors = FALSE,
-  row.names = "Geneid"
-)
-
-count_matrix <- as.matrix(counts_data[, 6:ncol(counts_data)])
-mode(count_matrix) <- "integer"
-
-# Try different separators for design file
-design_data <- NULL
-for (sep in c("\t", " ", ",")) {
-  design_data <- tryCatch(
-    read.table(
-      design_file,
-      sep = sep,
-      header = FALSE,
-      stringsAsFactors = FALSE,
-      col.names = c("sample", "condition")
-    ),
-    error = function(e) NULL
-  )
-  if (!is.null(design_data)) break
-}
-
-stopifnot(!is.null(design_data))
-stopifnot(all(colnames(count_matrix) == design_data$sample))
-
-colnames(design_data)
-design_data$condition
-design_data$sample
-colnames(count_matrix)
-
-dds <- DESeqDataSetFromMatrix(
-  countData = count_matrix,
-  colData = data.frame(
-    condition = factor(design_data$condition),
-    row.names = design_data$sample
-  ),
-  design = ~condition
-)
-
-# inspect the new dds object
-dds
-
-# Run the analysis on the object
-# dds <- DESeq(dds)
-dds <- DESeq(dds, betaPrior = FALSE)
-
-
-# check the resultsNames for the intercepted comparisons
-resultsNames(dds)
+resultsNames(dds_ra)
+# "condition_Fingolimod_vs_DMSO" "condition_Ozanimod_vs_DMSO"   "condition_Ponesimod_vs_DMSO"
 
 res_fin <- results(dds, name = "condition_Fingolimod_vs_DMSO")
 res_oza <- results(dds, name = "condition_Ozanimod_vs_DMSO")
 res_pon <- results(dds, name = "condition_Ponesimod_vs_DMSO")
-res_fin
 
-resLFC_Fingolimod <- lfcShrink(dds, coef = "condition_Fingolimod_vs_DMSO", type = "apeglm")
-resLFC_Ozanimod <- lfcShrink(dds, coef = "condition_Ozanimod_vs_DMSO", type = "apeglm")
-resLFC_Ponesimod <- lfcShrink(dds, coef = "condition_Ponesimod_vs_DMSO", type = "apeglm")
+resLFC_Fin<- lfcShrink(dds, coef = "condition_Fingolimod_vs_DMSO")
+resLFC_Oza<- lfcShrink(dds, coef = "condition_Ozanimod_vs_DMSO")
+resLFC_Pon<- lfcShrink(dds, coef = "condition_Ponesimod_vs_DMSO")
 
-# Extracting transformed values
-vsd <- vst(dds, blind = FALSE)
-# Principal component plot of the samples
-# plotPCA(vsd, intgroup = c("condition"))
-pcaData <- plotPCA(vsd, intgroup=c("condition"), returnData=TRUE)
-# Get the percentage of variance explained by PC1 and PC2
-percentVar <- round(100 * attr(pcaData, "percentVar"))
-# Assuming you want to color by the rownames in the dds colData
-pcaData$SampleName <- rownames(dds@colData)
+pca_path <- ("./results/RUTH/plots/PCA.png")
+save_pca_plot(dds, pca_path)
 
-# Create the PCA plot, coloring by sample names
-ggplot(pcaData, aes(PC1, PC2, color = SampleName, shape = condition)) +
-  geom_point(size = 3) +  # Plot the points
-  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
-  ylab(paste0("PC2: ", percentVar[2], "% variance")) + 
-  coord_fixed()
+plot_dir <- ("./results/RUTH/plots/")
+save_volcano_plot(resLFC_Fin, paste0(plot_dir, "VolcanoFingolimod.png"), "Fingolimod vs DMSO")
+save_volcano_plot(resLFC_Oza, paste0(plot_dir, "VolcanoOzanimod.png"),   "Ozanimod vs DMSO")
+save_volcano_plot(resLFC_Pon, paste0(plot_dir, "VolcanoPonesimod.png"),  "Ponesimod vs DMSO")
+# TODO: function to stitch 3 plots
 
-ggsave("./results/RNAseq/RUTH/PCA_plot.png")
 
-colnames(dds)
-# Plot the most basic volcano plot
-# For the most basic volcano plot, only a single data-frame, data-matrix, or
-# tibble of test results is required, containing point labels, log2FC, and
-# adjusted or unadjusted P values. The default cut-off for log2FC is >|2|; the
-# default cut-off for P value is 10e-6.
+# this gives log2(n + 1)
+ntd <- normTransform(dds)
+library("vsn")
+meanSdPlot(assay(ntd))
+# Check the structure of df to confirm it has the 'condition' column
 
-# 3 volcano plots
-EnhancedVolcano(resLFC_Fingolimod,
-  lab = rownames(resLFC_Fingolimod),
-  x = "log2FoldChange",
-  y = "pvalue",
-  title = "Fingolimod vs DMSO"
-)
-ggsave("./results/RNAseq/RUTH/VolcanoFingolimod.png")
 
-EnhancedVolcano(resLFC_Ozanimod,
-  lab = rownames(resLFC_Ozanimod),
-  x = "log2FoldChange",
-  y = "pvalue",
-  title = "Ozanimod vs DMSO"
-)
-ggsave("./results/RNAseq/RUTH/VolcanoOzanimod.png")
+select <- order(rowMeans(counts(dds, normalized = TRUE)), decreasing = TRUE)[1:150]
+df <- data.frame(condition = as.factor(colData(dds)$condition))
+rownames(df) <- colnames(dds)
 
-EnhancedVolcano(resLFC_Ponesimod,
-  lab = rownames(resLFC_Ponesimod),
-  x = "log2FoldChange",
-  y = "pvalue",
-  title = "Ponesimod vs DMSO"
+# Capture the pheatmap plot for ntd
+heatmap_ntd <- pheatmap(
+  assay(ntd)[select, ],
+  cluster_rows = FALSE,
+  show_rownames = TRUE,
+  cluster_cols = FALSE,
+  annotation_col = df,
+  color = colorRampPalette(c("blue", "white", "red"))(50),
+  silent = TRUE # This prevents pheatmap from showing the plot immediately
 )
 
-ggsave("./results/RNAseq/RUTH/VolcanoPonesimod.png")
+# Save the pheatmap for ntd using ggsave
+ggsave("./results/RNAseq/RUTH/heatmap_normalized50.png", plot = heatmap_ntd$gtable, width = 8, height = 8)
+
+
+# Capture the pheatmap plot for vsd
+heatmap_vsd <- pheatmap(
+  assay(vsd)[select, ],
+  cluster_rows = FALSE,
+  show_rownames = TRUE,
+  cluster_cols = FALSE,
+  annotation_col = df,
+  color = colorRampPalette(c("blue", "white", "red"))(50),
+  silent = TRUE # This prevents pheatmap from showing the plot immediately
+)
+
+# Save the pheatmap for vsd using ggsave
+ggsave("./results/RNAseq/RUTH/heatmap_stabalized150.png", plot = heatmap_vsd$gtable, width = 8, height = 8)
+
+
 
 # Get the top 10 up and downregulated genes for each treatment
 top_genes_list <- list(
   Fingolimod = list(
-    up = head(resLFC_Fingolimod[order(resLFC_Fingolimod$log2FoldChange, decreasing = TRUE),], 10),
-    down = head(resLFC_Fingolimod[order(resLFC_Fingolimod$log2FoldChange, decreasing = FALSE),], 10)
+    up = head(resLFC_Fingolimod[order(resLFC_Fingolimod$log2FoldChange, decreasing = TRUE), ], 10),
+    down = head(resLFC_Fingolimod[order(resLFC_Fingolimod$log2FoldChange, decreasing = FALSE), ], 10)
   ),
   Ozanimod = list(
-    up = head(resLFC_Ozanimod[order(resLFC_Ozanimod$log2FoldChange, decreasing = TRUE),], 10),
-    down = head(resLFC_Ozanimod[order(resLFC_Ozanimod$log2FoldChange, decreasing = FALSE),], 10)
+    up = head(resLFC_Ozanimod[order(resLFC_Ozanimod$log2FoldChange, decreasing = TRUE), ], 10),
+    down = head(resLFC_Ozanimod[order(resLFC_Ozanimod$log2FoldChange, decreasing = FALSE), ], 10)
   ),
   Ponesimod = list(
-    up = head(resLFC_Ponesimod[order(resLFC_Ponesimod$log2FoldChange, decreasing = TRUE),], 10),
-    down = head(resLFC_Ponesimod[order(resLFC_Ponesimod$log2FoldChange, decreasing = FALSE),], 10)
+    up = head(resLFC_Ponesimod[order(resLFC_Ponesimod$log2FoldChange, decreasing = TRUE), ], 10),
+    down = head(resLFC_Ponesimod[order(resLFC_Ponesimod$log2FoldChange, decreasing = FALSE), ], 10)
   )
 )
 
@@ -146,11 +91,11 @@ top_genes_list <- list(
 top_genes <- bind_rows(
   lapply(names(top_genes_list), function(treatment) {
     treatment_data <- top_genes_list[[treatment]]
-    
+
     # Add Treatment labels and bind rows for up and downregulated genes
     up_df <- as.data.frame(treatment_data$up) %>% mutate(Treatment = paste(treatment, "(Up)"))
     down_df <- as.data.frame(treatment_data$down) %>% mutate(Treatment = paste(treatment, "(Down)"))
-    
+
     bind_rows(up_df, down_df)
   })
 )
@@ -158,7 +103,7 @@ top_genes <- bind_rows(
 # Plot
 ggplot(top_genes, aes(x = reorder(rownames(top_genes), log2FoldChange), y = log2FoldChange, fill = Treatment)) +
   geom_bar(stat = "identity") +
-  coord_flip() +  # To make the plot horizontal
+  coord_flip() + # To make the plot horizontal
   labs(
     title = "Top 10 Up and Down Regulated Genes for Each Treatment",
     x = "Gene",
@@ -169,14 +114,16 @@ ggplot(top_genes, aes(x = reorder(rownames(top_genes), log2FoldChange), y = log2
     axis.text.x = element_text(angle = 90, hjust = 1),
     legend.position = "bottom"
   ) +
-  scale_fill_manual(values = c("Fingolimod (Up)" = "blue", "Fingolimod (Down)" = "red", 
-                              "Ozanimod (Up)" = "green", "Ozanimod (Down)" = "orange", 
-                              "Ponesimod (Up)" = "purple", "Ponesimod (Down)" = "yellow"))
+  scale_fill_manual(values = c(
+    "Fingolimod (Up)" = "blue", "Fingolimod (Down)" = "red",
+    "Ozanimod (Up)" = "green", "Ozanimod (Down)" = "orange",
+    "Ponesimod (Up)" = "purple", "Ponesimod (Down)" = "yellow"
+  ))
 
 ggsave("./results/RNAseq/RUTH/TopGenes.png")
 
 # check S1P1 for each
-S1P1 <- counts_data["S1pr1",]
+S1P1 <- counts_data["S1pr1", ]
 
 # Extract the LFC for S1pr1 from each DESeq2 result
 s1pr1_lfc_fin <- resLFC_Fingolimod["S1pr1", "log2FoldChange"]
@@ -238,7 +185,7 @@ s1pr1_data <- data.frame(
 # Plot the LFC for S1pr1 across the treatments
 ggplot(s1pr1_data, aes(x = Treatment, y = log2FoldChange, fill = Treatment)) +
   geom_bar(stat = "identity") +
-  geom_text(aes(label = sprintf("p=%.5f", pvalue)), vjust = -0.5) +  # Show p-value with 5 decimal places
+  geom_text(aes(label = sprintf("p=%.5f", pvalue)), vjust = -0.5) + # Show p-value with 5 decimal places
   labs(
     title = "Log2 Fold Change for S1pr1 across Treatments",
     x = "Treatment",
@@ -246,7 +193,7 @@ ggplot(s1pr1_data, aes(x = Treatment, y = log2FoldChange, fill = Treatment)) +
   ) +
   theme_minimal() +
   scale_fill_manual(values = c("Fingolimod" = "blue", "Ozanimod" = "green", "Ponesimod" = "purple")) +
-  coord_cartesian(ylim = c(min(s1pr1_data$log2FoldChange) - 1, max(s1pr1_data$log2FoldChange) + 1)) +  # Set y-axis limits to center 0
+  coord_cartesian(ylim = c(min(s1pr1_data$log2FoldChange) - 1, max(s1pr1_data$log2FoldChange) + 1)) + # Set y-axis limits to center 0
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     legend.position = "none"
