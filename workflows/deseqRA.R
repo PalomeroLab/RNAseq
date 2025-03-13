@@ -1,23 +1,18 @@
-#!/usr/bin/env Rscript
-counts_file <- "./data/featureCounts/ra_counts.tsv"
-design_file <- "./data/featureCounts/ra_data.tsv"
-dds_ra <- DESeq(DESeqDataSetFromFeatureCounts(counts_file, design_file))
-dds <- dds_ra
 
 colnames(dds)
 #  [1] "DMSO_1"       "DMSO_2"       "DMSO_3"       "Fingolimod_1" "Fingolimod_2" "Fingolimod_3"
 #  [7] "Ozanimod_1"   "Ozanimod_2"   "Ozanimod_3"   "Ponesimod_1"  "Ponesimod_2"  "Ponesimod_3"
 
-resultsNames(dds_ra)
+resultsNames(dds)
 # "condition_Fingolimod_vs_DMSO" "condition_Ozanimod_vs_DMSO"   "condition_Ponesimod_vs_DMSO"
 
 res_fin <- results(dds, name = "condition_Fingolimod_vs_DMSO")
 res_oza <- results(dds, name = "condition_Ozanimod_vs_DMSO")
 res_pon <- results(dds, name = "condition_Ponesimod_vs_DMSO")
 
-resLFC_Fin<- lfcShrink(dds, coef = "condition_Fingolimod_vs_DMSO")
-resLFC_Oza<- lfcShrink(dds, coef = "condition_Ozanimod_vs_DMSO")
-resLFC_Pon<- lfcShrink(dds, coef = "condition_Ponesimod_vs_DMSO")
+resLFC_Fin <- lfcShrink(dds, coef = "condition_Fingolimod_vs_DMSO")
+resLFC_Oza <- lfcShrink(dds, coef = "condition_Ozanimod_vs_DMSO")
+resLFC_Pon <- lfcShrink(dds, coef = "condition_Ponesimod_vs_DMSO")
 
 pca_path <- ("./results/RUTH/plots/PCA.png")
 save_pca_plot(dds, pca_path)

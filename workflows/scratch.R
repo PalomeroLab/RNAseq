@@ -1,4 +1,4 @@
-library(DESeq2)
+.libPaths()
 
 counts_file
 # [1] "./data/LAURA/PHIP/counts_noclone9.txt"
