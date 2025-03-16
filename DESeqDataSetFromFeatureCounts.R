@@ -1,5 +1,3 @@
-library(DESeq2)
-
 #' Create a DESeqDataSet from featureCounts output and experimental design data
 #' @param counts_file Path to featureCounts output
 #' @param design_file Path to two-column design file (no header, any delimiter)
@@ -7,8 +5,8 @@ library(DESeq2)
 #' @import DESeq2
 #' @importFrom utils read.table
 #' @usage dds <- DESeq(DESeqDataSetFromFeatureCounts(counts_file, design_file))
-
 DESeqDataSetFromFeatureCounts <- function(counts_file, design_file) {
+  stopifnot(require(DESeq2))
   stopifnot(all(file.exists(c(counts_file, design_file))))
 
   tryCatch(
@@ -82,4 +80,3 @@ DESeqDataSetFromFeatureCounts <- function(counts_file, design_file) {
     }
   )
 }
-
