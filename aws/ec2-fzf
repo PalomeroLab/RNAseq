@@ -1,0 +1,302 @@
+#!/usr/bin/env python3
+
+import argparse
+import subprocess
+import os
+import sys
+import json
+import tempfile
+from pathlib import Path
+
+
+class EC2Helper:
+    def __init__(self):
+        self.ssh_config = os.path.expanduser("~/.ssh/config")
+
+    def list_instances(self):
+        """List EC2 instances with Name, ID, and Public DNS"""
+        try:
+            cmd = [
+                "aws",
+                "ec2",
+                "describe-instances",
+                "--query",
+                "Reservations[*].Instances[*].[Tags[?Key==`Name`].Value | [0], InstanceId, PublicDnsName, State.Name, InstanceType]",
+                "--output",
+                "json",
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            instances = json.loads(result.stdout)
+
+            # Format instances for display
+            formatted_instances = []
+            for instance_group in instances:
+                for instance in instance_group:
+                    name = instance[0] if instance[0] else "NoName"
+                    instance_id = instance[1]
+                    dns = instance[2] if instance[2] else "No DNS"
+                    state = instance[3]
+                    instance_type = instance[4]
+                    formatted_instances.append(
+                        f"{name}\t{instance_id}\t{dns}\t{state}\t{instance_type}"
+                    )
+
+            return formatted_instances
+
+        except subprocess.CalledProcessError as e:
+            print(f"Error listing instances: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    def start_instance(self, instance_id):
+        """Start the specified EC2 instance"""
+        try:
+            print(f"Starting instance {instance_id}...")
+            cmd = ["aws", "ec2", "start-instances", "--instance-ids", instance_id]
+            subprocess.run(cmd, check=True)
+            print(f"Instance {instance_id} starting")
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"Error starting instance: {e}", file=sys.stderr)
+            return False
+
+    def stop_instance(self, instance_id):
+        """Stop the specified EC2 instance"""
+        try:
+            print(f"Stopping instance {instance_id}...")
+            cmd = ["aws", "ec2", "stop-instances", "--instance-ids", instance_id]
+            subprocess.run(cmd, check=True)
+            print(f"Instance {instance_id} stopping")
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"Error stopping instance: {e}", file=sys.stderr)
+            return False
+
+    def update_ssh_config(self, host, hostname):
+        """Update SSH config file with the given host and hostname"""
+        if not hostname or hostname == "No DNS":
+            print(f"No hostname available for {host}, skipping SSH config update.")
+            return False
+
+        try:
+            # Check if host exists in config
+            with open(self.ssh_config, "r") as f:
+                config_content = f.read()
+
+            host_entry = f"Host {host}"
+            hostname_line = f"  Hostname {hostname}"
+
+            if host_entry in config_content:
+                # Replace existing hostname line
+                lines = config_content.splitlines()
+                in_host_section = False
+                new_lines = []
+
+                for line in lines:
+                    if line.strip() == host_entry:
+                        in_host_section = True
+                        new_lines.append(line)
+                    elif in_host_section and line.strip().startswith("Hostname"):
+                        new_lines.append(hostname_line)
+                    else:
+                        if in_host_section and line.strip().startswith("Host "):
+                            in_host_section = False
+                        new_lines.append(line)
+
+                with open(self.ssh_config, "w") as f:
+                    f.write("\n".join(new_lines))
+                print(f"Updated Hostname for {host} to {hostname}")
+            else:
+                # Add new host entry
+                with open(self.ssh_config, "a") as f:
+                    f.write(f"\n{host_entry}\n{hostname_line}\n  User ec2-user\n")
+                print(f"Added new host {host} with hostname {hostname}")
+
+            return True
+        except Exception as e:
+            print(f"Error updating SSH config: {e}", file=sys.stderr)
+            return False
+
+    def connect_to_instance(self, hostname):
+        """Connect to the instance via SSH"""
+        if not hostname or hostname == "No DNS":
+            print("No hostname available for connection")
+            return False
+
+        try:
+            print(f"Connecting to {hostname}...")
+            os.execvp("ssh", ["ssh", hostname])
+            return True
+        except Exception as e:
+            print(f"Error connecting via SSH: {e}", file=sys.stderr)
+            return False
+
+    def run_fzf_selection(self, instances):
+        """Run FZF to select an instance"""
+        if not instances:
+            print("No instances to select from", file=sys.stderr)
+            return None
+
+        try:
+            # Create a temporary file for FZF preview
+            with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+                preview_script = f.name
+                f.write("#!/bin/bash\n")
+                f.write("instance_id=$(echo \"$1\" | awk '{print $2}')\n")
+                f.write(
+                    'aws ec2 describe-instances --instance-ids "$instance_id" | jq\n'
+                )
+            os.chmod(preview_script, 0o755)
+
+            # Create a temporary file for instance list
+            with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+                instance_file = f.name
+                for instance in instances:
+                    f.write(f"{instance}\n")
+
+            # Run FZF with preview and keybindings
+            cmd = [
+                "fzf",
+                "--ansi",
+                "--preview",
+                f"{preview_script} {{}}",
+                "--preview-window",
+                "right:50%",
+                "--header",
+                "ENTER: Select, CTRL-S: Start, CTRL-T: Stop, CTRL-U: Update SSH, CTRL-C: Connect",
+                "--bind",
+                "ctrl-s:execute(echo START {})+abort",
+                "--bind",
+                "ctrl-t:execute(echo STOP {})+abort",
+                "--bind",
+                "ctrl-u:execute(echo UPDATE {})+abort",
+                "--bind",
+                "ctrl-c:execute(echo CONNECT {})+abort",
+                "--bind",
+                "enter:execute(echo SELECT {})+abort",
+            ]
+
+            result = subprocess.run(
+                cmd,
+                input=open(instance_file, "r").read(),
+                capture_output=True,
+                text=True,
+            )
+
+            # Clean up temporary files
+            os.unlink(preview_script)
+            os.unlink(instance_file)
+
+            if (
+                result.returncode != 0 and result.returncode != 130
+            ):  # 130 is the exit code for Ctrl+C
+                return None
+
+            return result.stdout.strip()
+
+        except Exception as e:
+            print(f"Error in FZF selection: {e}", file=sys.stderr)
+            return None
+
+    def handle_fzf_selection(self, selection):
+        """Handle the output from FZF selection"""
+        if not selection:
+            return
+
+        parts = selection.split()
+        if len(parts) < 5:
+            print("Invalid selection format", file=sys.stderr)
+            return
+
+        action = parts[0]
+        name = parts[1]
+        instance_id = parts[2]
+        hostname = parts[3]
+
+        if action == "START":
+            self.start_instance(instance_id)
+        elif action == "STOP":
+            self.stop_instance(instance_id)
+        elif action == "UPDATE":
+            self.update_ssh_config(name, hostname)
+        elif action == "CONNECT":
+            self.connect_to_instance(hostname)
+        elif action == "SELECT":
+            print(f"Selected: {name} ({instance_id}) - {hostname}")
+        else:
+            print(f"Unknown action: {action}", file=sys.stderr)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="AWS EC2 Helper")
+    subparsers = parser.add_subparsers(dest="command", help="Command to run")
+
+    # List command
+    list_parser = subparsers.add_parser("list", help="List EC2 instances")
+
+    # Start command
+    start_parser = subparsers.add_parser("start", help="Start an EC2 instance")
+    start_parser.add_argument("--id", help="Instance ID to start")
+
+    # Stop command
+    stop_parser = subparsers.add_parser("stop", help="Stop an EC2 instance")
+    stop_parser.add_argument("--id", help="Instance ID to stop")
+
+    # SSH config command
+    ssh_parser = subparsers.add_parser("ssh-config", help="Update SSH config")
+    ssh_parser.add_argument("--host", help="Host name")
+    ssh_parser.add_argument("--hostname", help="Hostname/IP")
+
+    # Interactive mode command
+    subparsers.add_parser("interactive", help="Interactive mode with FZF")
+
+    args = parser.parse_args()
+    helper = EC2Helper()
+
+    if args.command == "list":
+        instances = helper.list_instances()
+        for instance in instances:
+            print(instance.replace("\t", "  "))
+
+    elif args.command == "start":
+        if args.id:
+            helper.start_instance(args.id)
+        else:
+            instances = helper.list_instances()
+            selection = helper.run_fzf_selection(instances)
+            if selection:
+                instance_id = selection.split()[2]
+                helper.start_instance(instance_id)
+
+    elif args.command == "stop":
+        if args.id:
+            helper.stop_instance(args.id)
+        else:
+            instances = helper.list_instances()
+            selection = helper.run_fzf_selection(instances)
+            if selection:
+                instance_id = selection.split()[2]
+                helper.stop_instance(instance_id)
+
+    elif args.command == "ssh-config":
+        if args.host and args.hostname:
+            helper.update_ssh_config(args.host, args.hostname)
+        else:
+            instances = helper.list_instances()
+            selection = helper.run_fzf_selection(instances)
+            if selection:
+                parts = selection.split()
+                name = parts[1]
+                hostname = parts[3]
+                helper.update_ssh_config(name, hostname)
+
+    elif args.command == "interactive" or not args.command:
+        instances = helper.list_instances()
+        selection = helper.run_fzf_selection(instances)
+        helper.handle_fzf_selection(selection)
+
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()

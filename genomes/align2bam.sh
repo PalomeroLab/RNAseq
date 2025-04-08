@@ -3,12 +3,16 @@
 ## Takes input and output directories as arguments.
 
 set -euo pipefail
+# set -x
 
+THREADS="$(nproc)"
+
+# replace these with the appropriate paths
+REFERENCE="/opt/genomes/human/GCA_000001405.15_GRCh38_full_analysis_set"
 INPUT_FOLDER="20241029_Jurkat_PHF6-PHIP-KO_LQ/"
 OUTPUT_FOLDER="$HOME/aligned"
+
 mkdir -p "$OUTPUT_FOLDER"
-THREADS="$(nproc)"
-REFERENCE="/opt/genomes/human/GCA_000001405.15_GRCh38_full_analysis_set"
 
 cd "$INPUT_FOLDER" || {
 	echo "Error: $INPUT_FOLDER does not exist"
