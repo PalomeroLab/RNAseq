@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+
+import os
+import subprocess
+
+# SSH Config File Path
+SSH_CONFIG = os.path.expanduser("~/.ssh/config")
+
+
+# Function to update HostName in SSH config
+def update_ssh_config(host, new_hostname):
+    # Read the SSH config file
+    with open(SSH_CONFIG, "r") as file:
+        config_lines = file.readlines()
+
+    # Flag to indicate if the Host block is found
+    host_found = False
+    updated_lines = []
+    i = 0
+
+    # Iterate through the config file to find the Host entry
+    while i < len(config_lines):
+        line = config_lines[i]
+
+        # If the line starts with 'Host' and matches the given host
+        if line.strip().startswith("Host ") and host in line:
+            host_found = True
+            updated_lines.append(line)  # Add the Host line
+            i += 1
+            # Update all HostName lines for the current Host block
+            while i < len(config_lines) and not config_lines[i].strip().startswith(
+                "Host "
+            ):
+                if config_lines[i].startswith("  HostName"):
+                    # Replace the HostName line with the new hostname
+                    updated_lines.append(f"  HostName {new_hostname}\n")
+                else:
+                    updated_lines.append(config_lines[i])
+                i += 1
+        else:
+            # Just add the line to the updated list if it's not part of the block
+            updated_lines.append(line)
+            i += 1
+
+    # If the host was found and updated
+    if host_found:
+        with open(SSH_CONFIG, "w") as file:
+            file.writelines(updated_lines)
+        print(f"Updated HostName for {host} to {new_hostname}.")
+    else:
+        print(f"Host {host} not found in the SSH config file.")
+
+
+# Function to select an EC2 instance using fzf
+def select_instance():
+    # Call the script to list EC2 instances (which internally calls AWS CLI)
+    result = subprocess.run(
+        "../aws/ec2-list-instances.sh", shell=True, stdout=subprocess.PIPE
+    )
+    instances = result.stdout.decode().strip().splitlines()
+
+    # Use fzf to select one line
+    selected_instance = subprocess.run(
+        ["fzf"], input="\n".join(instances), text=True, capture_output=True
+    ).stdout.strip()
+
+    if not selected_instance:
+        print("No instance selected. Exiting.")
+        exit(1)
+
+    # Extract the host and hostname
+    parts = selected_instance.split()
+    if len(parts) >= 3:
+        host = parts[0]
+        new_hostname = parts[2]
+        return host, new_hostname
+    else:
+        print("Invalid selection or missing hostname.")
+        exit(1)
+
+
+def main():
+    # Get selected instance info
+    host, new_hostname = select_instance()
+
+    # Update the SSH config with the new hostname
+    update_ssh_config(host, new_hostname)
+
+
+if __name__ == "__main__":
+    main()
