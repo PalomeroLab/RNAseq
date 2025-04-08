@@ -6,19 +6,12 @@ library(DESeq2)
 library(apeglm)
 source("./rnaseq/R/DESeqDataSetFromFeatureCounts.R")
 
-dir <- "./data/RNAseq/20240409_Tet2Rhoa-S1P1_RA"
-counts_file <- file.path(dir, "counts_noPon.tsv")
-# [1] "./data/RNAseq/20240409_Tet2Rhoa-S1P1_RA/counts_noPon.tsv"
-design_file <- file.path(dir, "design_noPon.tsv")
-# [1] "./data/RNAseq/20240409_Tet2Rhoa-S1P1_RA/design_noPon.tsv"
-
+dir <- "./data/RNAseq/20240409_Tet2Rhoa-S1P1_RA/"
 counts_file <- file.path(dir, "counts.tsv")
 design_file <- file.path(dir, "design.tsv")
-
-output_file <- file.path(dir, "dds_noPon.rds")
+output_file <- file.path(dir, "dds.rds")
 
 # Skip this section if we have already generated the DESeq object
-dds <- DESeqDataSetFromFeatureCounts(counts_file, design_file)
 dds <- DESeq(DESeqDataSetFromFeatureCounts(counts_file, design_file))
 saveRDS(dds, file = output_file)
 
@@ -34,8 +27,6 @@ resultsNames(dds)
 
 
 resLFC.fin <- lfcShrink(dds, coef = "condition_Fingolimod_vs_DMSO")
-resLFC.oza <- lfcShrink(dds, coef = "condition_Ozanimod_vs_DMSO")
-
 summary(resLFC.fin)
 # out of 25577 with nonzero total read count
 # adjusted p-value < 0.1
@@ -47,6 +38,7 @@ summary(resLFC.fin)
 # [1] see 'cooksCutoff' argument of ?results
 # [2] see 'independentFiltering' argument of ?results
 
+resLFC.oza <- lfcShrink(dds, coef = "condition_Ozanimod_vs_DMSO")
 summary(resLFC.oza)
 # out of 25577 with nonzero total read count
 # adjusted p-value < 0.1
@@ -98,24 +90,22 @@ table(resLFC1$padj < 0.05)
 # 16188   268
 
 # Gene clustering
-BiocManager::install("pheatmap", package="binary")
+# BiocManager::install("genefilter")
 library("genefilter")
-library("pheatmap")
 vsd <- vst(dds, blind = FALSE)
+topVarGenes <- head(order(rowVars(assay(vsd)), decreasing = TRUE), 20)
+mat <- assay(vsd)[topVarGenes, ]
+mat <- mat - rowMeans(mat)
+anno <- data.frame(condition = colData(vsd)$condition)
+rownames(anno) <- colnames(vsd)
+pheatmap(mat, annotation_col = anno, filename = "./heatmap.png", width = 7, height = 7)
+
 topVarGenes <- head(order(rowVars(assay(vsd)), decreasing = TRUE), 50)
 mat <- assay(vsd)[topVarGenes, ]
 mat <- mat - rowMeans(mat)
 anno <- data.frame(condition = colData(vsd)$condition)
 rownames(anno) <- colnames(vsd)
-pheatmap(mat, annotation_col = anno, filename = "./heatmap2_100.png", width = 7, height = 7)
-
-topVarGenes <- head(order(rowVars(assay(vsd)), decreasing = TRUE), 50)
-mat <- assay(vsd)[topVarGenes, ]
-mat <- mat - rowMeans(mat)
-anno <- data.frame(condition = colData(vsd)$condition)
-rownames(anno) <- colnames(vsdl
 pheatmap(mat, annotation_col = anno, filename = "./heatmap50.png", width = 10, height = 10)
-
 
 # inspect S1P1 in each table
 res.05[res.05$gene == "S1pr1", ]
