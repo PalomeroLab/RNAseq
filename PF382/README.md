@@ -48,4 +48,20 @@ Output saved as `.tsv` for import into R for DESeq2 analysis.
 
 ## `DESeq2`
 
-WIP...
+Design file, a csv (or any kind of delimiter) file containing:
+
+- filename
+- experimental condition
+- sample alias
+
+```csv
+PF382-CTRL-CLONE-1,CTRL,CTRL_01
+PF382-CTRL-CLONE-2,CTRL,CTRL_02
+PF382-PHF6-KO-CLONE-2,PHF6,PHF6_02
+PF382-PHF6-KO-CLONE-6,PHF6,PHF6_06
+PF382-PHF6-KO-CLONE-7,PHF6,PHF6_07
+PF382-PHIP-KO-CLONE-19,PHIP,PHIP_19
+PF382-PHIP-KO-CLONE-31,PHIP,PHIP_31
+PF382-PHIP-KO-CLONE-32,PHIP,PHIP_32
+PF382CTRL-CLONE-3,CTRL,CTRL_03
+```
