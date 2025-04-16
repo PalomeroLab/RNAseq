@@ -40,11 +40,21 @@ Pipeline to `.bam`:
 - sorted
 - duplicates marked (but not removed)
 
+### Genome Reference
+
+Reference HISAT2 index acquired from `seqs_for_alignment_pipelines.ucsc_ids` at
+[RefSeq: NCBI Reference Sequence Database](https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/635/GCA_000001635.9_GRCm39/seqs_for_alignment_pipelines.ucsc_ids/)
+
 ## `featureCounts`
 
 Count reads per gene using `featureCounts` from the Subread package.
 
 Output saved as `.tsv` for import into R for DESeq2 analysis.
+
+### Annotation Reference
+
+Reference gtf acquired from `seqs_for_alignment_pipelines.ucsc_ids` at
+[RefSeq: NCBI Reference Sequence Database](https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/635/GCA_000001635.9_GRCm39/seqs_for_alignment_pipelines.ucsc_ids/)
 
 ## `DESeq2`
 
