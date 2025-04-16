@@ -5,6 +5,6 @@ projects
 results
 cbmf
 .*
-# quatro build files
 *_files/
 .Rproj.user
+notes/

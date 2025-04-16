@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+"""
+AWS EC2 Manager with fzf interface and CLI support
+"""
+
+import argparse
+import subprocess
+import os
+import json
+from pathlib import Path
+
+
+class EC2Instance:
+    """Minimal class to represent an EC2 instance"""
+
+    def __init__(self, instance_id, name, instance_type, state, dns):
+        self.id = instance_id
+        self.name = name
+        self.type = instance_type
+        self.state = state
+        self.dns = dns
+
+    def __repr__(self):
+        return f"[{self.id}, ({self.name}), type={self.type}>, state={self.state}, dns={self.dns}]"
+
+    def __str__(self):
+        return f"{self.id} ({self.name}) - [{self.state}: {self.dns}]"
+
+
+class EC2Helper:
+    """Encapsulation of AWS EC2 operations"""
+
+    def __init__(self):
+        self.ssh_config = os.path.expanduser("~/.ssh/config")
+        self.instances = self._load_instances()
+
+    def __repr__(self):
+        instances_repr = ",\n  ".join(repr(i) for i in self.instances)
+        return f"<EC2Helper ssh_config='{self.ssh_config}' instances=[\n  {instances_repr}\n]>"
+
+    def _load_instances(self):
+        cmd = ["aws", "ec2", "describe-instances", "--output", "json"]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        data = json.loads(result.stdout)
+
+        instances = []
+        for reservation in data["Reservations"]:
+            for inst in reservation["Instances"]:
+                name_tag = next(
+                    (
+                        tag["Value"]
+                        for tag in inst.get("Tags", [])
+                        if tag["Key"] == "Name"
+                    ),
+                    "NoName",
+                )
+                instances.append(
+                    EC2Instance(
+                        name=name_tag,
+                        instance_id=inst.get("InstanceId"),
+                        dns=inst.get("PublicDnsName", "No DNS"),
+                        state=inst.get("State", {}).get("Name"),
+                        instance_type=inst.get("InstanceType"),
+                    )
+                )
+        return instances
+
+    def _resolve(self, identifier):
+        for instance in self.instances:
+            if instance.id == identifier or instance.name == identifier:
+                return instance
+        return None
+
+    def get_instance_by_name(self, name):
+        return self._resolve(name)
+
+    def get_instance_id_from_name(self, name):
+        instance = self._resolve(name)
+        return instance.id if instance else None
+
+    def start(self, identifier):
+        instance = self._resolve(identifier)
+        if instance:
+            cmd = ["aws", "ec2", "start-instances", "--instance-ids", instance.id]
+            subprocess.run(cmd, check=True)
+
+    def stop(self, identifier):
+        instance = self._resolve(identifier)
+        if instance:
+            cmd = ["aws", "ec2", "stop-instances", "--instance-ids", instance.id]
+            subprocess.run(cmd, check=True)
+
+    def update_ssh_config(self, instance):
+        if instance.state != "running" or not instance.dns.startswith("ec2-"):
+            return
+
+        host = instance.name.replace(" ", "_")
+        Path(self.ssh_config).touch(exist_ok=True)
+        with open(self.ssh_config, "r") as f:
+            lines = f.readlines()
+
+        updated_lines = []
+        in_host_block = False
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped == f"Host {host}":
+                in_host_block = True
+                updated_lines.append(line)
+                continue
+            if in_host_block:
+                if stripped.startswith("Host "):
+                    in_host_block = False
+                elif stripped.startswith("Hostname"):
+                    lines[i] = f"  Hostname {instance.dns}\n"
+                    in_host_block = False
+            updated_lines.append(lines[i])
+
+        with open(self.ssh_config, "w") as f:
+            f.writelines(updated_lines)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="AWS EC2 Manager with FZF interface")
+    subparsers = parser.add_subparsers(dest="command")
+
+    subparsers.add_parser("list")
+
+    start = subparsers.add_parser("start")
+    start.add_argument("--id", help="Instance ID or Name to start")
+
+    stop = subparsers.add_parser("stop")
+    stop.add_argument("--id", help="Instance ID or Name to stop")
+
+    update = subparsers.add_parser("update-ssh")
+    update.add_argument("--id", help="Instance ID or Name to update SSH config")
+
+    return parser.parse_args()
+
+
+def run_fzf(ec2):
+    instance_id_map = {i.id: i for i in ec2.instances}
+    lines = list(str(i) for i in ec2.instances)
+
+    cmd = [
+        "fzf",
+        "--ansi",
+        "--layout=reverse",
+        "--info=inline",
+        "--height=40%",
+        "--header",
+        "CTRL-S: Start/Stop | CTRL-U: Update SSH | ENTER: Show Info",
+        "--expect=enter,ctrl-s,ctrl-u",
+    ]
+    proc = subprocess.Popen(
+        cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True
+    )
+    stdout, _ = proc.communicate("\n".join(lines))
+    if not stdout:
+        return None
+
+    parts = stdout.strip().split("\n")
+    key = parts[0]
+    line = parts[1] if len(parts) > 1 else None
+    if not line:
+        return None
+
+    # extract the instance ID from the selected line
+    instance_id = line.split(" ")[0]
+    instance = instance_id_map.get(instance_id)
+    if not instance:
+        print(f"Instance ID '{instance_id}' not found.")
+        return None
+
+    if key == "ctrl-s":
+        action = "stop" if instance.state == "running" else "start"
+    elif key == "ctrl-u":
+        action = "update_ssh"
+    else:
+        action = "select"
+
+    return action, instance
+
+
+def main():
+    args = parse_args()
+    ec2 = EC2Helper()
+
+    if not args.command:
+        result = run_fzf(ec2)
+        if not result:
+            return
+        action, instance = result
+    else:
+        action = args.command
+        instance = ec2._resolve(args.id)
+        if not instance:
+            print(f"Instance '{args.id}' not found.")
+            return
+
+    if action == "start":
+        ec2.start(instance.id)
+    elif action == "stop":
+        ec2.stop(instance.id)
+    elif action == "update_ssh":
+        ec2.update_ssh_config(instance)
+    elif action == "select":
+        print(instance)
+
+
+if __name__ == "__main__":
+    main()

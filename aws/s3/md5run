@@ -1,0 +1,22 @@
+#!/bin/bash
+
+set -euo pipefail
+
+BASE=~/data
+JOBS=$(nproc)
+
+find "$BASE/scRNA-seq" "$BASE/tapestri" -type f -name "*.fastq.gz" | parallel -j "$JOBS" '
+  fq="{}"
+  md5="${fq}.md5"
+
+  if [[ -f "$md5" ]]; then
+    if md5sum -c "$md5" --quiet; then
+      echo "OK: $fq"
+    else
+      echo "FAIL: $fq"
+    fi
+  else
+    md5sum "$fq" > "$md5"
+    echo "CREATED: $md5"
+  fi
+'
