@@ -149,8 +149,6 @@ binomial distribution.
 > transformation. The package also provides functions to visualize the data and
 > results.
 
-<!-- -->
-
 ## Tuxedo Suite
 
 The Tuxedo Suite is a collection of tools for transcript-level expression analysis of RNA-seq experiments.
