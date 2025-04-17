@@ -1,64 +1,23 @@
 # RNA Sequencing Analysis
 
-RNA sequencing (RNA-seq) is a technique used to analyze the transcriptome -
+RNA sequencing (RNA-seq) is a technique used to analyze the _transcriptome_ —
 the complete set of RNA transcripts in a cell. This method involves sequencing
 RNA molecules after reverse transcription to cDNA to examine gene expression levels
 and identify novel transcripts.
+
+## Pre-requisites
+
+Before starting the analysis, ensure you have the following:
+
+- Aligned reads in SAM/BAM/CRAM format
+- A reference annotation file in GTF or GFF format
+- A read quantification tool such as featureCounts or HTSeq
 
 This document describes two pipelines for RNA-seq analysis:
 
 - Using `featureCounts` and then analyzing with DESeq2 in R
 - Using the Tuxedo Suite (HISAT2, StringTie, Ballgown)
 
-## Alignment
-
-GRCh38 (latest major release)
-[FTP](https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/)
-
-Use pre-built index for `hisat2` from `seqs_for_alignment_pipelines.ucsc_ids/`
-
-```sh
-# Align reads and process BAM file
-# the `dta` flag is only if we're aligning RNAseq reads
-hisat2 -p "$THREADS" --dta -x "$REFERENCE" -1 "$r1_fastq" -2 "$r2_fastq" \
-        | samtools sort -n -@ "$THREADS" - \
-        | samtools fixmate -@ "$THREADS" -m - - \
-        | samtools sort -@ "$THREADS" - \
-        | samtools markdup -@ "$THREADS" - "$bam_file"
-```
-
-## Count Reads
-
-FeatureCounts form Subread package
-
-```sh
-featureCounts -a ${ANNOTATION} -p --countReadPairs -T$(nproc) -o total_counts.txt ./*.bam
-```
-
-Annotation file from `seqs_for_alignment_pipelines.ucsc_ids/`
-
-- GCA_000001405.15_GRCh38_full_analysis_set.refseq_annotation.gff.gz 2024-09-10 13:15 74M
-- GCA_000001405.15_GRCh38_full_analysis_set.refseq_annotation.gtf.gz
-
-## DESeq2
-
-<https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html>
-
-In version 1.18 (November 2017), we add two alternative shrinkage estimators,
-which can be used via lfcShrink: an estimator using a t prior from the apeglm
-packages, and an estimator with a fitted mixture of normals prior from the
-ashr package.
-
-In version 1.16 (November 2016), the log2 fold change shrinkage is no longer
-default for the DESeq and nbinomWaldTest functions, by setting the defaults
-of these to betaPrior=FALSE, and by introducing a separate function
-lfcShrink, which performs log2 fold change shrinkage for visualization and
-ranking of genes. While for the majority of bulk RNA-seq experiments, the LFC
-shrinkage did not affect statistical testing, DESeq2 has become used as an
-inference engine by a wider community, and certain sequencing datasets show
-better performance with the testing separated from the use of the LFC prior.
-Also, the separation of LFC shrinkage to a separate function lfcShrink allows
-for easier methods development of alternative effect size estimators.
 ## `featureCounts`
 
 [`featureCounts`](https://subread.sourceforge.net/featureCounts.html)
@@ -85,6 +44,17 @@ Example usage:
 featureCounts -T "$NUM_THREADS" --verbose -t exon -g gene_id --countReadPairs \
   -a "$REF_GTF" -p -P -C -B -o "${OUT_DIR}/${OUT_PREFIX}.tsv" ./*.bam
 ```
+
+Or, more simply:
+
+```sh
+featureCounts -a ${ANNOTATION} -p --countReadPairs -T$(nproc) -o total_counts.txt ./*.bam
+```
+
+Annotation file from `seqs_for_alignment_pipelines.ucsc_ids/`
+
+- GCA_000001405.15_GRCh38_full_analysis_set.refseq_annotation.gff.gz 2024-09-10 13:15 74M
+- GCA_000001405.15_GRCh38_full_analysis_set.refseq_annotation.gtf.gz
 
 ### Output
 
@@ -217,4 +187,3 @@ Using Ballgown:
 - Kim D, Langmead B, Salzberg SL. HISAT: a fast spliced aligner with low memory requirements. Nat Methods. 2015;12(4):357-360. [PMID: 25751142](https://pubmed.ncbi.nlm.nih.gov/25751142/)
 - Pertea M, Pertea GM, Antonescu CM, Chang TC, Mendell JT, Salzberg SL. StringTie enables improved reconstruction of a transcriptome from RNA-seq reads. Nat Biotechnol. 2015;33(3):290-295. [PMID: 25690850](https://pubmed.ncbi.nlm.nih.gov/25690850/)
 - Frazee AC, Pertea G, Jaffe AE, Langmead B, Salzberg SL, Leek JT. Ballgown bridges the gap between transcriptome assembly and expression analysis. Nat Biotechnol. 2015;33(3):243-246. [PMID: 25748911](https://pubmed.ncbi.nlm.nih.gov/25748911/)
-
