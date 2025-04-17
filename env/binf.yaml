@@ -1,9 +1,0 @@
-name: binf
-channels:
-  - bioconda
-  - conda-forge
-dependencies:
-  - jupyter
-  - matplotlib
-  - plotly
-  - pandas

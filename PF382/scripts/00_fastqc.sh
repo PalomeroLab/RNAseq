@@ -1,3 +1,0 @@
-#!/bin/sh
-## WIP...
-## See Azenta report for now
